@@ -1,0 +1,59 @@
+Te voy a pasar una descripcion de una interfaz de usuario HMI con pantalla tactil. Se trata de un camera slider que mueve una camara de video por un rail en un eje (x) y a la vez gira la camara (y). El usuario puede seleccionar uno entre varios movimientos guardados para reproducirlos o para ajustarlos y guardarlos.
+Te paso la descripcion burda para que la esquematices mejor y revises que no faltan opciones de navegacion (que siempre se pueda salir y llegar a cualquier pantalla aunque sea pasando por varias pantallas) 
+
+
+
+1. PANTALLA INIT
+ARRIBA EN GRANDE LOGO XPTX
+ABAJO: 
+  BOTON HOMING  
+  BOTON GO
+   Los 2 botones estan inactivos 1s para esperar a que el arduino este listo. Podrian incluso no verse y aparecer despues de ese tiempo. 
+   El boton Homing ordena ir a finales de carrera. Mientras no hay confirmacion de que se hizo el ajuste de homing, los demas boton es estan desactivados. 
+   El boton GO salta a PANTALLA MAIN
+
+2. PANTALLA HOME
+TITULO: XPERIMENTRONIX CAMERA SLIDER
+ARRIBA BOTONES DE MOVIMIENTOS PREPROGRAMADOS: 1, 2, 3, 4
+ABAJO BOTON RESET
+ reset envia realmente un reset al arduino y ademas resetea la pantalla HMI de forma que vuelve a PANTALLA START en espera de hacer homing
+ Se ven en verde los botones de los movimientos que ya estén configurados de antes.  En gris normal los que esten por defecto.
+
+3. PANTALLA DE MOVEMENT CONFIG N
+TITULO: MOVEMENT CONFIG N
+ARRIBA INDICADORES TIPO GAUGE: POS INICIAL (X, Y) Y POS FINAL (X, Y)   
+ABAJO BOTONES: REPRODUCIR, GRABAR, INICIO
+   AL PULSAR GRABAR EL BOTON GRABAR SALTA A PANTALLA GRABAR CONFIG N
+   AL PULSAR GRABAR EL BOTON REPRODUCIR SALTA A PANTALLA REPRODUCIR CONFIG N
+   Al pulsar INICIO se vuelve a PANTALLA MAIN
+
+4. PANTALLA REPRODUCIR CONFIG N:
+TITULO: REPRODUCIR MOVIMIENTO N
+ARRIBA SLIDERS DE VELOCIDAD Y ACELERACION. Los sliders se cargan con la config guardada pero se pueden modificar temporalmente para esta reproduccion.
+ABAJO BOTONES GRANDES: START, LOOP, PAUSE Y STOP
+    START va siempre a posicion inicial lo mas rapido posible con accel y velocidad hardcodeadas. Despues hace una pausa de 1s y luego inicia movimiento N hasta llegar al final. Ahi se para.
+    LOOP hace movimiento desde donde haya quedado parado hasta el final y luego repite indefinidamente pero el retroceso lo hace simetrico repiciendo veloc y aceleracion a la inversa.
+    PAUSE detiene bruscamente sin volver al inicio.
+    STOP detiene buscamente y luego vuelve al inicio lo mas rápidamente posible igual que en START.
+  Al mover los sliders de velocidad y accel lo ideal era que se detuviera para actualizar el movimiento desde dónde está hasta el final. Igual que pulsando PAUSE y luego LOOP.
+    EL BOTON STOP además de mandar detener tambien vuelve a la pantalla PANTALLA DE MOVEMENT CONFIG N. 
+
+5. PANTALLA GRABAR CONFIG N:
+ARRIBA BOTON: POSICION INICIAL Y BOTON POSICION FINAL
+MEDIO SLIDERS DE VELOCIDAD Y ACELERACION. Los sliders se cargan con la config guardada si la habia y al modificarlos se guarda una nueva.
+   se puede sólo modificar aceleracion y velocidad sin cambiar la ruta del movimiento al no pulsar botones de posicion.
+ABAJO BOTON SAVE Y BOTON CANCEL.
+   al pulsar en posicion inicial se pasa a PANTALLA POSICION INICIAL N y lo mismo con la final. 
+   al pulsar save o cancel vuelve a PANTALLA DE MOVEMENT CONFIG N
+
+6. PANTALLA POSICION INICIAL N:
+TITULO: AJUSTA POSION INICIAL DEL MOVIMIENTO N
+ARRIBA SLIDERS HORIZONTALES PARA AJUSTAR X E Y
+ABAJO BOTONES SET Y CANCEL  en ambos vuelve a pantalla Grabar config N pero en uno aplica y en otro no.
+ al cambiar sliders, los motores se mueven en tiempo real. El boton SET esta deshabilitado por el arduino mientras los motores siguen moviendose.
+ al pulsar SET o CANCEL se vuelve a la PANTALLA GRABAR CONFIG N
+
+
+7. PANTALLA POSICION FINAL N:
+ identica a la pantalla inicial pero aplica a la posicion final del movimiento N
+

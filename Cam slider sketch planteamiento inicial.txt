@@ -1,0 +1,142 @@
+Sketch de Arduino que se ejecutará en Arduino Nano con una CNC shield v4. Hay 2 motores paso a paso conectados y 2 finales de carrera. Ambos corresponden a los ejes X e Y.
+Hay tambien una pantalla Nextion conectada al único uart que tiene el Arduino Nano.
+La funcion general del sketch es controlar los motores segun ordenes recibidas por uart desde la pantalla. La pantalla envia comandos en texto ascii al arduino para que mueva motores pero tambien para que guarde, modifique o cargue perfiles de configuración de movimiento.
+Habrá siempre 4 perfiles de movimiento guardados en memoria no volatil. Cuando se inicia la ejecución en el Arduino, debe comprobar si los perfiles tienen formato correcto (incluir un campo de checksum dentro del perfil) y sobrescribir cada perfil incorrecto por uno que usa valores por defecto predefinidos en #defines.
+Los perfiles almacenados solo se pueden cargar enteros, guardar enteros o sobrescribir a valores por defecto siempre por completo. No se puede leer o escribir uno de sus campos por separado.
+Usa un struct para definir el perfil. 
+Además de los 4 perfiles almacenados en memoria no volatil, exisitirá siempre 1 perfil temporal cargado en ram, con mismo formato. 
+Un comando uart ordenará que se cargue un perfil concreto de los almacenados a ram y se copiará al perfil temporal. Con otro comando se hace lo inverso, se copia de perfil en ram a un perfil concreto en no volatil.
+Sobre el perfil en ram (llamado temporal) se ejecutarán todos los cambios y lecturas de campos. Tambien sobre este se ejecutan los movimientos de motores.
+Hacer homing consiste en mover motores a velocidad indicada en un #define y direccion al final de carrera. Se detiene al activar el final de carrera y se considera que esa posición es la 0. La direccion de movimiento hacia final de carrera se indica en un define para cada eje y puede ser positiva o negativa (representado por +1 o -1).
+ 
+Formato del perfil de movimiento:
+uint32_t posicion_inicial
+uint32_t posicion_final
+int32_t velocidad_max
+int32_t aceleracion
+
+La unidades de medida de posición son pasos de motor. No es necesario usar medidas reales ni angulos. Los motores de los ejes X e Y son diferentes y además uno provoca un giro mientras que el otro un desplazamiento lineal pero realmente el sketch no necesita entender ni controlar los mm o grados reales. 
+El usuario crea periles progradamos con posiciones iniciales y finales (añadiendo datos de aceleracion y velocidad mñaxima) y el sketch solamente interpola usando la libreria accelstepper para repetir ese mismo movimiento mas adelante.
+En la comunicacion con la pantalla todos los valores numericos se representan en ascii decimal y como numeros enteros. Aunque haya calculos en coma flotante en algun momento, a la pantalla se deben enviar y recibir numeros enteros. Como las unidades de posicion son pasos de motor y de por si son indivisibles no tienen problema. Pero para velocidad y aceleración, que es posible que necesiten valores decimales para meter en las funciones de la libreria accelstepper, es necesario tener previstas funciones de conversion a entero con un escalado para no perder precision... Por ejemplo multiplicar por 1000 antes de convertir a entero y dividir por 1000 para convertir a coma flotante. 
+
+LISTA DE COMANDOS a recibir desde la pantalla:
+
+cal			Ejecuta un homing de ambos ejes y después envia una vez por uart la respuesta a cal (definida mas abajo)
+loadcfgpos N		Carga el perfil N de la memoria no volatil al perfil temperal en ram. (N indica a qué indice de perfil de movimiento se refiere. Valor entero entre 1 y 4)
+reset			Envía la respuesta a reset (indicada mas abajo) y después de terminar de enviarla ejecuta un reset del MCU
+getcfgpos		Envía la respuesta a getcfgpos usando los datos de posición inicial y final para ambos ejes del perfil temporal
+getcfgspac		Envía la respuesta a getcfgspac usando los datos de aceleracion y velocidad almacenados en el perfil temporal
+setcfgsp num_val	Actualiza el perfil temporal con el nuevo valor de velocidad maxima que llega como parametro num_val en numero entero representado como ascii.
+setcfgac num_val	Actualiza el perfil temporal con el nuevo valor de aceleracion que llega como parametro num_val en numero entero representado como ascii.
+playstart		Ejecuta el movimiento programado por el perfil temporal actual. Primero desplaza motores a la posicion inicial a velocidad y aceleracion hardcondeadas con defines. Espera un tiempo en milisegundos tambien hardcodeado en define. Luego se desplaza desde initial a final con velocidad maxima y aceleracion definidas en el perfil temporal. Al llegar al final se detiene.
+playloop		Hace lo mismo que playstart pero al llegar al final inmediatamente reinicia el movimiento en sentido inverso digiendose desde final a inicio y usando los mismos valores de aceleracion y velocidad aunque cambiando el sentido del movimiento. Una vez llega del nuevo a inicio repite esta secuencia indefinidamente.
+playpause		Al recibir este comando deben detenerse los motores bruscamente en la posición en la que estén. Si estaba ejecutandose un playloop o playstart se cancelan y se queda en la posicion en que coincida en el momento de recibir el comando.
+playstop		Hace lo mismo que playpause pero despues de detenerse se dirije a la posicion inicial con velocidad y aceleracion predefinidas por los mismos defines mencionados antes y se queda en la posición inicial hasta nuevo comando.
+recsave	N		Guarda todos los datos del perfil temporal en el perfil de memoria no volatil numero N.
+getcfginitial		Envia respuesta a getcfginitial		
+getcfgfinal		Envia respuesta a getcfginitial	
+setcfginitx num_val	Actualiza el perfil temporal con el nuevo valor de posicion inicial X que llega como parametro num_val en numero entero representado como ascii. Además los motores se mueven a la posición inicial X, Y del perfil una vez actiualizado y lo hacen a aceleracion y velocidad hardcodeadas en un define.
+setcfginity num_val	Actualiza el perfil temporal con el nuevo valor de posicion inicial Y que llega como parametro num_val en numero entero representado como ascii.  Además los motores se mueven a la posición inicial X, Y del perfil una vez actiualizado y lo hacen a aceleracion y velocidad hardcodeadas en un define.
+setcfgfinalx num_val	Actualiza el perfil temporal con el nuevo valor de posicion final X que llega como parametro num_val en numero entero representado como ascii.  Además los motores se mueven a la posición final X, Y del perfil una vez actiualizado y lo hacen a aceleracion y velocidad hardcodeadas en un define.
+setcfgfinaly num_val	Actualiza el perfil temporal con el nuevo valor de posicion final Y que llega como parametro num_val en numero entero representado como ascii.	 Además los motores se mueven a la posición final X, Y del perfil una vez actiualizado y lo hacen a aceleracion y velocidad hardcodeadas en un define.			
+
+Respuesta a comando "cal":
+Serial.print("homingDone.val=1");
+Serial.write(0xFF);
+Serial.write(0xFF);
+Serial.write(0xFF);
+Serial.print("bGo.pco=0");
+Serial.write(0xFF);
+Serial.write(0xFF);
+Serial.write(0xFF);
+Serial.print("bGo.pco2=65535");
+Serial.write(0xFF);
+Serial.write(0xFF);
+Serial.write(0xFF);
+Serial.print("bGo.bco2=1024");
+Serial.write(0xFF);
+Serial.write(0xFF);
+Serial.write(0xFF);
+
+
+Respuesta al comando "reset" 
+Serial.print("rest"); //Nextion no usa reset sino rest
+Serial.write(0xFF);
+Serial.write(0xFF);
+Serial.write(0xFF);
+
+
+Respuesta al comando "getcfgpos". Lee los comentarios del codigo para ver como tienes que modificarlo.
+Serial.print("gSx.val=xx"); //aquí reemplazar xx por representacion numerica entera en ascii del valor de la posicion inicial para el eje X del perfil temporal
+Serial.write(0xFF);
+Serial.write(0xFF);
+Serial.write(0xFF);
+Serial.print("gSy.val=xx"); //aquí reemplazar xx por representacion numerica entera en ascii del valor de la posicion inicial para el eje Y del perfil temporal
+Serial.write(0xFF);
+Serial.write(0xFF);
+Serial.write(0xFF);
+Serial.print("gEx.val=xx"); //aquí reemplazar xx por representacion numerica entera en ascii del valor de la posicion final para el eje X del perfil temporal
+Serial.write(0xFF);
+Serial.write(0xFF);
+Serial.write(0xFF);
+Serial.print("gEy.val=xx"); //aquí reemplazar xx por representacion numerica entera en ascii del valor de la posicion final para el eje Y del perfil temporal
+Serial.write(0xFF);
+Serial.write(0xFF);
+Serial.write(0xFF);
+
+Respuesta al comando "getcfgspac":
+Serial.print("sSpeed.val=xx"); //aquí reemplazar xx por representacion numerica entera en ascii del valor de velocidad maxima del perfil
+Serial.write(0xFF);
+Serial.write(0xFF);
+Serial.write(0xFF);
+Serial.print("nSpeed.val=xx"); //aquí reemplazar xx por el mismo valor de velocidad
+Serial.write(0xFF);
+Serial.write(0xFF);
+Serial.write(0xFF);
+Serial.print("sAccel.val=xx"); //aquí reemplazar xx por representacion numerica entera en ascii del valor de aceleracion maxima del perfil
+Serial.write(0xFF);
+Serial.write(0xFF);
+Serial.write(0xFF);
+Serial.print("nAccel.val=xx"); //aquí reemplazar xx por el mismo valor de aceleracion
+Serial.write(0xFF);
+Serial.write(0xFF);
+Serial.write(0xFF);
+	
+
+Respuesta a comando "getcfginitial":
+Serial.print("sX.val=nn"); //En lugar de nn envía el número ascii del valor de X en posicion inicial del perfil temporal
+Serial.write(0xFF);
+Serial.write(0xFF);
+Serial.write(0xFF);
+Serial.print("nX.val=nn"); //Idem: En lugar de nn envía el número ascii del valor de X en posicion inicial del perfil temporal
+Serial.write(0xFF);
+Serial.write(0xFF);
+Serial.write(0xFF);
+Serial.print("sY.val=nn");  //En lugar de nn envía el número ascii del valor de Y en posicion inicial del perfil temporal
+Serial.write(0xFF);
+Serial.write(0xFF);
+Serial.write(0xFF);
+Serial.print("nY.val=nn"); //Idem: En lugar de nn envía el número ascii del valor de Y en posicion inicial del perfil temporal
+Serial.write(0xFF);
+Serial.write(0xFF);
+Serial.write(0xFF);
+
+
+Respuesta a comando "getcfgfinal":
+Serial.print("sX.val=nn"); //En lugar de nn envía el número ascii del valor de X en posicion final del perfil temporal
+Serial.write(0xFF);
+Serial.write(0xFF);
+Serial.write(0xFF);
+Serial.print("nX.val=nn"); //Idem: En lugar de nn envía el número ascii del valor de X en posicion final del perfil temporal
+Serial.write(0xFF);
+Serial.write(0xFF);
+Serial.write(0xFF);
+Serial.print("sY.val=nn"); //En lugar de nn envía el número ascii del valor de Y en posicion final del perfil temporal
+Serial.write(0xFF);
+Serial.write(0xFF);
+Serial.write(0xFF);
+Serial.print("nY.val=nn"); //Idem: En lugar de nn envía el número ascii del valor de Y en posicion final del perfil temporal
+Serial.write(0xFF);
+Serial.write(0xFF);
+Serial.write(0xFF);
+		

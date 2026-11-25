@@ -1,0 +1,179 @@
+========================================================================
+COMANDOS UART DEL FIRMWARE - CAMERA SLIDER
+========================================================================
+Lista de referencia de todos los comandos que entiende el firmware
+(Sketch/camera_slider/camera_slider.ino). Se reciben por UART, uno por
+linea, terminados en '\n' (tambien se acepta '\r\n'; el '\r' se ignora).
+Formato general:  <comando> [valor]
+
+Notas de escalado:
+  - Los sliders de la pantalla Nextion trabajan SIEMPRE en rango fijo
+    0-1000. El firmware reescala 0-1000 a valores reales segun la
+    magnitud:
+      * velocidad y aceleracion -> maximo real 4000
+      * posiciones -> maximo real de cada eje (X=100000, Y=22000 pasos)
+  - Los comandos de consulta (get*) devuelven valores ya reescalados a
+    0-1000 (lo que espera el slider), no el valor real en pasos.
+  - movex / movey son la excepcion: usan pasos relativos crudos
+    (NO se reescalan) y recalculan el destino sumando el valor a la
+    posicion actual.
+
+Todos los comandos set/get operan sobre un "perfil temporal" en RAM.
+Para persistir hay que guardarlo en EEPROM con recsave.
+
+========================================================================
+CONFIGURACION (SET) - rango de entrada 0-1000
+========================================================================
+
+setcfgsp <0-1000>
+  Ajusta la velocidad maxima del perfil temporal.
+  Reescala 0-1000 -> 0-4000 pasos/s.
+  Respuesta: ninguna.
+
+setcfgac <0-1000>
+  Ajusta la aceleracion del perfil temporal.
+  Reescala 0-1000 -> 0-4000 pasos/s^2.
+  Respuesta: ninguna.
+
+setcfginitx <0-1000>
+  Fija la posicion INICIAL del eje X en el perfil temporal.
+  Reescala 0-1000 -> 0-100000 pasos (MAX_POS_X).
+  Ademas lanza un movimiento hacia la posicion inicial.
+  Respuesta: ninguna por UART.
+
+setcfginity <0-1000>
+  Fija la posicion INICIAL del eje Y en el perfil temporal.
+  Reescala 0-1000 -> 0-22000 pasos (MAX_POS_Y).
+  Ademas lanza un movimiento hacia la posicion inicial.
+  Respuesta: ninguna por UART.
+
+setcfgfinalx <0-1000>
+  Fija la posicion FINAL del eje X en el perfil temporal.
+  Reescala 0-1000 -> 0-100000 pasos (MAX_POS_X).
+  Ademas lanza un movimiento hacia la posicion final.
+  Respuesta: ninguna por UART.
+
+setcfgfinaly <0-1000>
+  Fija la posicion FINAL del eje Y en el perfil temporal.
+  Reescala 0-1000 -> 0-22000 pasos (MAX_POS_Y).
+  Ademas lanza un movimiento hacia la posicion final.
+  Respuesta: ninguna por UART.
+
+========================================================================
+CONSULTA (GET) - devuelven valores 0-1000 hacia la pantalla Nextion
+========================================================================
+
+getcfgpos
+  Devuelve las posiciones inicial y final (X e Y) del perfil temporal,
+  ya reescaladas a 0-1000, escribiendolas en la pantalla Nextion:
+    nSx.val = inicial X
+    nSy.val = inicial Y
+    nEx.val = final X
+    nEy.val = final Y
+
+getcfgspac
+  Devuelve velocidad y aceleracion del perfil temporal, reescaladas a
+  0-1000, hacia la pantalla Nextion:
+    sSpeed.val / nSpeed.val = velocidad
+    sAccel.val / nAccel.val = aceleracion
+
+getcfginitial
+  Devuelve la posicion INICIAL (X e Y) del perfil temporal, reescalada
+  a 0-1000, hacia la pantalla Nextion:
+    sX.val / nX.val = inicial X
+    sY.val / nY.val = inicial Y
+
+getcfgfinal
+  Devuelve la posicion FINAL (X e Y) del perfil temporal, reescalada
+  a 0-1000, hacia la pantalla Nextion:
+    sX.val / nX.val = final X
+    sY.val / nY.val = final Y
+
+rposx
+  Devuelve la posicion ACTUAL (real, en pasos) del eje X.
+  Respuesta por UART: numero entero + '\n' (para terminal/usuario).
+
+rposy
+  Devuelve la posicion ACTUAL (real, en pasos) del eje Y.
+  Respuesta por UART: numero entero + '\n'.
+
+========================================================================
+MOVIMIENTO MANUAL (relativo, en pasos crudos - NO se reescala)
+========================================================================
+
+movex <delta>
+  Mueve el eje X de forma relativa <delta> pasos (puede ser negativo).
+  El destino se recalcula = posicion actual + delta, limitado al rango
+  [0, MAX_POS_X]. Usa la velocidad/aceleracion del perfil.
+  Respuesta: ninguna.
+
+movey <delta>
+  Mueve el eje Y de forma relativa <delta> pasos (puede ser negativo).
+  El destino se recalcula = posicion actual + delta, limitado al rango
+  [0, MAX_POS_Y]. Usa la velocidad/aceleracion del perfil.
+  Respuesta: ninguna.
+
+========================================================================
+REPRODUCCION (PLAY)
+========================================================================
+
+playstart
+  Ejecuta la secuencia una vez: va a la posicion inicial, espera y luego
+  se desplaza a la posicion final. Los dos ejes se mueven sincronizados
+  (maestro-seguidor): el eje de mayor recorrido corre con la rampa de
+  AccelStepper y el otro lo sigue en cada paso para llegar a la vez.
+  Respuesta: ninguna.
+
+playloop
+  Igual que playstart pero en bucle: tras llegar al final regresa a la
+  inicial y repite indefinidamente (ida y vuelta), tambien con ejes
+  sincronizados maestro-seguidor.
+  Respuesta: ninguna.
+
+playpause
+  Detiene (frena) ambos ejes y pasa a estado IDLE. No regresa a la
+  posicion inicial.
+  Respuesta: ninguna.
+
+playstop
+  Detiene (frena) ambos ejes y ordena volver a la posicion inicial.
+  Respuesta: ninguna.
+
+========================================================================
+MEMORIA / EEPROM (perfiles 1-4)
+========================================================================
+
+recsave <1-4>
+  Guarda el perfil temporal actual en la ranura de EEPROM indicada
+  (valores validos 1 a 4). Fuera de ese rango no hace nada.
+  Respuesta: ninguna.
+
+loadcfgpos <1-4>
+  Carga el perfil de la ranura de EEPROM indicada (1 a 4) al perfil
+  temporal. Si el checksum es invalido (ranura corrupta/vacia) carga los
+  valores por defecto en su lugar. Fuera de rango 1-4 no hace nada.
+  Respuesta: ninguna.
+
+clearmem
+  Borra en EEPROM la zona de los 4 perfiles (la rellena con 0xFF). Al
+  siguiente arranque, el firmware detecta el checksum invalido y
+  reescribe los 4 perfiles con los valores por defecto.
+  Respuesta por UART: "memclr\n".
+
+========================================================================
+HOMING Y SISTEMA
+========================================================================
+
+cal
+  Ejecuta el homing (calibracion): busca los finales de carrera y fija
+  el cero. Es secuencial: primero X y luego Y.
+  Respuesta: ninguna por UART.
+
+reset
+  Reinicia el firmware (reset por software, salto a 0x0000). Antes envia
+  "rest" a la pantalla Nextion y vacia el buffer serie.
+  Respuesta: ninguna (el micro se reinicia).
+
+------------------------------------------------------------------------
+Cualquier comando no reconocido se ignora (CMD_UNKNOWN, sin respuesta).
+------------------------------------------------------------------------
